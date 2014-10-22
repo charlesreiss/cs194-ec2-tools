@@ -1,0 +1,26 @@
+Dear {group_name},
+
+For Homework 4, we will be supplying your group with access to an EC2 machine.
+
+For this, we will supply you with two types of credentials: a password to
+the Amazon Web Services web console, which will allow you to reboot, start
+and stop a machine, and an SSH private key to login to that machine.
+
+Your login is:
+Username: {account}
+Password: {password}
+
+Enter this at https://404842661577.signin.aws.amazon.com/console to login
+to the management console. Click 'EC2', then select 'US West (Oregon)' in
+the upper-right corner.
+
+You will be able to see all running VMs there (but not start/stop other team's),
+to see only the ones assigned to your group, use the earch bar at the
+top of "Instances" tab to look for VMs tagged with the tag "for_user" set to the
+value "{account}".
+
+An SSH private key in OpenSSH format is attached to this email. If you are using
+PuTTY to SSH, then you need to first convert this private key using the PuTTYgen
+tool distributed with PuTTY.
+
+- CS194-16 course staff
