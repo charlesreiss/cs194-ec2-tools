@@ -54,7 +54,7 @@ def terminate_instances(args):
             instance.terminate()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
     setup_args(parser)
     account_util.setup_args(parser)
     args = parser.parse_args()

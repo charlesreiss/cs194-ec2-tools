@@ -56,7 +56,7 @@ def make_group_line(group_row, students, seen_emails):
     )
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
     parser.add_argument('groups')
     parser.add_argument('students')
     parser.add_argument('output')

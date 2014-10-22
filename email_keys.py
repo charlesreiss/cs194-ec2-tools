@@ -84,7 +84,7 @@ def send_email(args, message, to_emails):
     server.quit()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
     account_util.setup_args(parser)
     setup_args(parser)
     args = parser.parse_args()

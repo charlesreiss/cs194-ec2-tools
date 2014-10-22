@@ -13,7 +13,7 @@ import account_util
 
 ## XXX: Need to distribute SSH keys somehow?
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
     parser.add_argument('--init_db', action='store_true', default=False)
     parser.add_argument('--wipe_first', action='store_true', default=False)
     parser.add_argument('--skip_create', action='store_true', default=False)
