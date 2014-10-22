@@ -5,6 +5,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 
 import argparse
+import codecs
 import logging
 import socket
 import os.path
@@ -56,14 +57,14 @@ def generate_email(args, group_name, to_emails, account, password, key_file):
     message['To'] = ', '.join(to_emails)
     if args.cc:
         message['Cc'] = args.cc
-    with open(args.template_file, 'r') as fh:
+    with codecs.open(args.template_file, 'r', 'utf-8') as fh:
         template = fh.read() 
         filled_template = template.format(
             group_name=group_name,
             account=account,
             password=password,
         )
-    message.attach(MIMEText(filled_template, 'plain'))
+    message.attach(MIMEText(filled_template.encode('utf-8'), 'plain', 'UTF-8'))
 
     with open(key_file, 'r') as fh:
         sub_message = MIMEBase('application', 'octet-stream')
@@ -96,7 +97,7 @@ if __name__ == '__main__':
     dbh = account_util.connect_db(args)
     passwords = account_util.get_all_passwords(args, dbh)
     dbh.close()
-    with open(args.account_map, 'r') as fh:
+    with codecs.open(args.account_map, 'r', 'utf-8') as fh:
         for line in fh:
             parts = line.strip().split('\t')
             group_name = parts[0]
