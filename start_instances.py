@@ -2,6 +2,7 @@
 import argparse
 import logging
 import sys
+import codecs
 
 import account_util
 
@@ -10,15 +11,9 @@ def setup_args(parser):
     parser.add_argument('--mode', choices=['start','stop','terminate'], required=True)
     parser.add_argument('--ami', default='ami-b5a7ea85') # US West Oregon, HVM, 64-bit, Amazon Linux AMI
     parser.add_argument('--type', default='t2.micro')
-    parser.add_argument('--users', default=None)
 
 def start_instances(args):
-    if args.users == None:
-        dbh = account_util.connect_db()
-        user_list = account_util.get_all_users()
-        dbh.close()
-    else:
-        user_list = args.users.split(',')
+    user_list = account_util.get_users(args)
     ec2 = account_util.connect_ec2(args)
     existing_instances = account_util.instances_by_user(args, ec2)
     started_instances = {}
@@ -41,17 +36,21 @@ def start_instances(args):
     return failed_instances.keys()
 
 def stop_instances(args):
-    assert(not args.users) # not implemented
+    user_set = set(account_util.get_users(args))
     ec2 = account_util.connect_ec2(args)
     for user, instances in account_util.instances_by_user(args, ec2).iteritems():
+        if user not in user_set:
+            continue
         for instance in instances:
             instance.stop()
 
 def terminate_instances(args):
-    assert(not args.users) # not implemented
+    user_set = set(account_util.get_users(args))
     ec2 = account_util.connect_ec2(args)
     for user, instances in account_util.instances_by_user(args, ec2).iteritems():
-        for instance in instances:
+        if user not in user_set:
+            continue
+        for instance in instancese
             instance.terminate()
 
 if __name__ == '__main__':

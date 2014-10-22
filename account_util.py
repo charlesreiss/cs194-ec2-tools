@@ -36,6 +36,25 @@ def setup_args(parser):
     group.add_argument('--boto_log_level', choices=['DEBUG','INFO','WARNING','ERROR', 'CRITICAL'], default='INFO')
     group.add_argument('--account_util_log_level', choices=['DEBUG','INFO','WARNING','ERROR', 'CRITICAL'], default='DEBUG')
 
+    # default is all users
+    parser.add_argument('--users', default=None)
+    parser.add_argument('--users_from_list', default=None)
+
+def get_users(args):
+    if args.users_from_list:
+        assert(not args.users)
+        user_list = []
+        with codecs.open(args.users_from_list, 'r', 'utf-8') as fh:
+            for line in fh:
+                user_list.append(line.split('\t')[1])
+    elif args.users:
+        user_list = args.users.split(',')
+    else:
+        dbh = connect_db(args)
+        user_list = account_util.get_all_users(args, dbh)
+        dbh.close()
+    return user_list
+
 def init_logging(args):
     logging.basicConfig()
     LOGGER.setLevel(logging.__dict__[args.account_util_log_level])

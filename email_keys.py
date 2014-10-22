@@ -22,7 +22,6 @@ def setup_args(parser):
     group.add_argument('--subject', default='[CS194-16] EC2 credentials for HW4')
     group.add_argument('--from', dest='from_', default='charles.reiss+cs194@berkeley.edu')
     group.add_argument('--cc', default=None)
-    group.add_argument('--account_map')
 
     group.add_argument('--smtp_gateway')
     group.add_argument('--smtp_username')
@@ -97,7 +96,7 @@ if __name__ == '__main__':
     dbh = account_util.connect_db(args)
     passwords = account_util.get_all_passwords(args, dbh)
     dbh.close()
-    with codecs.open(args.account_map, 'r', 'utf-8') as fh:
+    with codecs.open(args.users_from_list, 'r', 'utf-8') as fh:=
         for line in fh:
             parts = line.strip().split('\t')
             group_name = parts[0]
