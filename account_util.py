@@ -1,4 +1,6 @@
 import boto
+import boto.ec2
+import logging
 import random
 import subprocess
 import os
@@ -6,6 +8,8 @@ import os.path
 import time
 
 import sqlite3
+
+LOGGER = logging.getLogger(__name__)
 
 POLL_DELAY = 10
 
@@ -16,15 +20,32 @@ SSH_OPTIONS = [
 ]
 
 def setup_args(parser):
-    parser.add_argument('--creds_db', default='creds.db')
-    parser.add_argument('--ssh_key_dir', default='ssh-keys')
-    parser.add_argument('--password_wordlist', default='diceware_list.txt')
-    parser.add_argument('--default_group', default='students')
-    parser.add_argument('--aws_region', 'us-west-2')
-    parser.add_argument('--instance_up_wait', default=120)
-    parser.add_argument('--instance_stop_wait', default=180)
-    parser.add_argument('--instance_pending_wait', default=600)
-    parser.add_argument('--ssh_user_name', default='root')
+    group = parser.add_argument_group('account_util')
+    group.add_argument('--aws_region', default='us-west-2')
+    group.add_argument('--profile', default=os.environ.get('AWS_PROFILE'))
+    group.add_argument('--creds_db', default='creds.db')
+    group.add_argument('--ssh_key_dir', default='ssh-keys')
+    group.add_argument('--password_wordlist', default='diceware_list.txt')
+    group.add_argument('--default_group', default='students')
+    group.add_argument('--default_security_group', default='students')
+    group.add_argument('--instance_up_wait', default=120)
+    group.add_argument('--instance_stop_wait', default=180)
+    group.add_argument('--instance_pending_wait', default=600)
+    group.add_argument('--ssh_user_name', default='ec2-user')
+
+    group.add_argument('--boto_log_level', choices=['DEBUG','INFO','WARNING','ERROR', 'CRITICAL'], default='INFO')
+    group.add_argument('--account_util_log_level', choices=['DEBUG','INFO','WARNING','ERROR', 'CRITICAL'], default='DEBUG')
+
+def init_logging(args):
+    logging.basicConfig()
+    LOGGER.setLevel(logging.__dict__[args.account_util_log_level])
+    logging.getLogger('boto').setLevel(logging.__dict__[args.boto_log_level])
+
+def connect_ec2(args):
+    return boto.ec2.connect_to_region(args.aws_region, profile_name=args.profile)
+
+def connect_iam(args):
+    return boto.connect_iam(profile_name=args.profile)
 
 def connect_db(args):
     return sqlite3.connect(args.creds_db, isolation_level=None)
@@ -46,7 +67,7 @@ def init_db(args, dbh):
     """)
 
 def generate_password(args):
-    with open(arg.password_words, 'r') as fh:
+    with open(args.password_wordlist, 'r') as fh:
         words = map(lambda s: s.strip(), fh.readlines())
     rng = random.SystemRandom()
     return ' '.join([random.choice(words) for i in range(3)])
@@ -60,51 +81,106 @@ def get_all_users(args, dbh):
 
 def _generate_keypair(args, name):
     subprocess.check_call([
-        'ssh-keygen', '-t', 'rsa', '-f', os.path.join(args.ssh_key_dir, name)
+        'ssh-keygen', '-N', '', '-t', 'rsa', '-f', os.path.join(args.ssh_key_dir, name),
+        '-C', name
     ])
     with open(os.path.join(args.ssh_key_dir, name + '.pub'), 'r') as fh:
         return fh.read()
 
 def _put_user_policy(args, iam, user_name):
-    iam.put_user_policy(user_name,
-        'StartStopTaggedInstances-' + user_name,
+    policy = \
         """
         {
-            "Version": "2012-10-17",
-            "Statement":[{
-                "Effect":"Allow",
-                "Action":["ec2:StartInstances","ec2:StopInstances"],
-                "Resource": "*",
-                "Condition": {
-                    "StringEquals": {
-                        "ec2:ResourceTag/for_user": "{user_name}"
-                    }
+            "Version":"2012-10-17",
+            "Statement": [
+                {
+                    "Sid":"StartStopInstances%(user_name)s",
+                    "Effect": "Allow",
+                    "Action": [
+                        "ec2:StartInstances",
+                        "ec2:StopInstances",
+                        "ec2:RebootInstances"
+                    ],
+                    "Condition": {
+                        "StringEquals": {
+                            "ec2:ResourceTag/for_user": "%(user_name)s"
+                        }
+                    },
+                    "Resource": [
+                        "*"
+                    ]
                 }
-            }]
+            ]
        }
-       """.format(user_name=user_name)
+       """ % {'user_name': user_name}
+    policy = policy.strip()
+    LOGGER.debug('policy is %s', policy)
+    iam.put_user_policy(user_name,
+        'StartStopTaggedInstances-' + user_name,
+        policy,
     )
 
+
+def wipe_account(args, dbh, iam, ec2, user_name):
+    try:
+        iam.remove_user_from_group(args.default_group, user_name) 
+    except boto.exception.BotoServerError:
+        pass
+
+    try:
+        iam.delete_login_profile(user_name) 
+    except boto.exception.BotoServerError:
+        pass
+
+    try:
+        iam.delete_user_policy(user_name, 'StartStopTaggedInstances-' + user_name)
+    except boto.exception.BotoServerError:
+        pass
+    try:
+        ec2.delete_key_pair(user_name)
+        if os.path.exists(os.path.join(args.ssh_key_dir, user_name)):
+            os.unlink(os.path.join(args.ssh_key_dir, user_name))
+            os.unlink(os.path.join(args.ssh_key_dir, user_name + '.pub'))
+    except boto.exception.BotoServerError:
+        pass
+
+    try:
+        iam.delete_user(user_name) 
+    except boto.exception.BotoServerError:
+        pass
+
+    dbh.execute("""
+        DELETE FROM users WHERE user_name = :user_name
+    """, {'user_name': user_name})
 
 def create_account(args, dbh, iam, ec2, user_name, name, note=''):
     response = iam.create_user(user_name)
     user = response.user
     password = generate_password(args)
     response = iam.create_login_profile(user_name, password)
-    iam.add_user_to_group(user_name, password)
+    iam.add_user_to_group(args.default_group, user_name)
     public_key = _generate_keypair(args, user_name)
     _put_user_policy(args, iam, user_name)
+    ec2.import_key_pair(user_name, public_key)
     dbh.execute("""
         INSERT INTO users (user_name, name, note, password)
         VALUES (:user_name, :name, :note, :password)
     """, {'user_name': user_name, 'name': name, 'note': note, 'password': password})
 
-def get_all_passwords(args, dbh, user_name):
+def get_all_passwords(args, dbh):
     c = dbh.cursor()
     c.execute("""
-        SELECT user_name, password FROM users ORDER BY user_name
-    """, {'user_name': user_name})
-    return c.fetchall()
+        SELECT user_name, password FROM users
+    """)
+    return dict(c.fetchall())
+
+def get_all_users(args, dbh):
+    c = dbh.cursor()
+    c.execute("""
+        SELECT user_name FROM users ORDER BY user_name
+    """)
+    return list(c.fetchall())
+
 
 def _find_active_instances_for(args, ec2, user_name):
     return ec2.get_all_instances(filters={
@@ -120,14 +196,16 @@ def instances_by_user(args, ec2):
     for tag in instance_tags:
         user = tag.value
         instance = ec2.get_only_instances(instance_ids=[tag.res_id])[0]
-        if instance.state != 'terminated' and instance.state != 'shutting-down':
+        if instance.state == 'terminated' or instance.state == 'shutting-down':
             continue
         result.setdefault(user, []).append(instance)
+    return result
 
 def make_reservation_for(args, ec2, user_name, launch_args):
     launch_args['key_name'] = user_name
+    launch_args['security_groups'] = launch_args.get('security_groups', []) + [args.default_security_group]
     reservation = ec2.run_instances(**launch_args)
-    return reservation.instances
+    return list(reservation.instances)
 
 def healthcheck_instances(args, ec2, instances_by_user):
     pending_instances = instances_by_user.copy()
@@ -157,7 +235,7 @@ def healthcheck_instances(args, ec2, instances_by_user):
                             'ssh', '-i', os.path.join(args.ssh_key_dir, user),
                             '-l', args.ssh_user_name,
                         ] + SSH_OPTIONS + [
-                            instance.public_ip_address,
+                            instance.public_dns_name,
                             '/bin/true'
                         ])
                         is_up = True
@@ -183,10 +261,10 @@ def healthcheck_instances(args, ec2, instances_by_user):
 def wait_for_and_tag_instances(args, ec2, instances_by_user):
     pending_instances = instances_by_user.copy()
     for user in pending_instances:
-        pending_instances[user] = pending_instances[user].copy()
+        pending_instances[user] = list(pending_instances[user])
     failed_instances = {}
     start_time = time.time()
-    while len(pending_instances) > 0 and time.time() - start_time < args.pending_instance_wait:
+    while len(pending_instances) > 0 and time.time() - start_time < args.instance_pending_wait:
         for user in pending_instances.keys():
             instances = pending_instances[user]
             still_pending = []
@@ -204,7 +282,7 @@ def wait_for_and_tag_instances(args, ec2, instances_by_user):
                 del pending_instances[user]
         time.sleep(POLL_DELAY)
     for user, instances in pending_instances.iteritems():
-        failed_instances.setdefault(user, []) += instances
+        failed_instances[user] = failed_instances.get(user, []) + instances
     return failed_instances
 
 
