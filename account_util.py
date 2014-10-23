@@ -40,6 +40,8 @@ def setup_args(parser):
     parser.add_argument('--users', default=None)
     parser.add_argument('--users_from_list', default=None)
 
+    parser.add_argument('--ssh_keygen', default='ssh-keygen')
+
 def get_users(args):
     if args.users_from_list:
         assert(not args.users)
@@ -100,7 +102,7 @@ def get_all_users(args, dbh):
 
 def _generate_keypair(args, name):
     subprocess.check_call([
-        'ssh-keygen', '-N', '', '-t', 'rsa', '-f', os.path.join(args.ssh_key_dir, name),
+        args.ssh_keygen, '-N', '', '-t', 'rsa', '-f', os.path.join(args.ssh_key_dir, name),
         '-C', name
     ])
     with open(os.path.join(args.ssh_key_dir, name + '.pub'), 'r') as fh:
