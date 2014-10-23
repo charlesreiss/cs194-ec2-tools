@@ -50,7 +50,7 @@ def terminate_instances(args):
     for user, instances in account_util.instances_by_user(args, ec2).iteritems():
         if user not in user_set:
             continue
-        for instance in instancese
+        for instance in instances:
             instance.terminate()
 
 if __name__ == '__main__':
