@@ -205,17 +205,19 @@ def get_all_users(args, dbh):
 
 def _find_active_instances_for(args, ec2, user_name):
     return ec2.get_all_instances(filters={
-        'tag:for_user': user_name,
+        'tag:saved_for_user': user_name,
         'instance-state-name': [
             'pending', 'running', 'stopping', 'stopped',
         ]
     })
 
-def instances_by_user(args, ec2):
+def instances_by_user(args, ec2, user_set=None):
     result = {}
-    instance_tags = ec2.get_all_tags({'resource_type': 'instance', 'key': 'for_user'})
+    instance_tags = ec2.get_all_tags({'resource_type': 'instance', 'key': 'saved_for_user'})
     for tag in instance_tags:
         user = tag.value
+        if user_set and user not in user_set:
+            continue
         instance = ec2.get_only_instances(instance_ids=[tag.res_id])[0]
         if instance.state == 'terminated' or instance.state == 'shutting-down':
             continue
@@ -280,6 +282,16 @@ def healthcheck_instances(args, ec2, instances_by_user):
             time.sleep(POLL_DELAY)
     return failed_instances
 
+def retag_instances(args, ec2, instances_by_user):
+    for user, instances in instances_by_user.iteritems():
+        for instance in instances:
+            instance.add_tag('for_user', user)
+
+def untag_instances(args, ec2, instances_by_user):
+    for user, instances in instances_by_user.iteritems():
+        for instance in instances:
+            instance.remove_tag('for_user')
+
 def wait_for_and_tag_instances(args, ec2, instances_by_user):
     pending_instances = instances_by_user.copy()
     for user in pending_instances:
@@ -296,6 +308,7 @@ def wait_for_and_tag_instances(args, ec2, instances_by_user):
                     still_pending.append(instance)
                 elif status == 'running':
                     instance.add_tag('for_user', user)
+                    instance.add_tag('saved_for_user', user)
                 else:
                     failed_instances.setdefault(user, []).append(instance)
             if len(still_pending) > 0:
