@@ -15,7 +15,7 @@ to the management console. Click 'EC2', then select 'US West (Oregon)' in
 the upper-right corner.
 
 You will be able to see all running VMs there (but not start/stop other team's),
-to see only the ones assigned to your group, use the earch bar at the
+to see only the ones assigned to your group, use the search bar at the
 top of "Instances" tab to look for VMs tagged with the tag "for_user" set to the
 value "{account}".
 
