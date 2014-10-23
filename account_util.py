@@ -277,6 +277,7 @@ def healthcheck_instances(args, ec2, instances_by_user):
                 pending_instances[user] = still_pending
             else:
                 del pending_instances[user]
+            time.sleep(POLL_DELAY)
     return failed_instances
 
 def wait_for_and_tag_instances(args, ec2, instances_by_user):
