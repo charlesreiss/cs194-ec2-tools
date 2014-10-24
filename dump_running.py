@@ -5,7 +5,7 @@ import argparse
 import account_util
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
     account_util.setup_args(parser)
     args = parser.parse_args()
     ec2 = account_util.connect_ec2(args)
