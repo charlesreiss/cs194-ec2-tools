@@ -53,7 +53,7 @@ def get_users(args):
         user_list = args.users.split(',')
     else:
         dbh = connect_db(args)
-        user_list = account_util.get_all_users(args, dbh)
+        user_list = get_all_users(args, dbh)
         dbh.close()
     return user_list
 
@@ -92,13 +92,6 @@ def generate_password(args):
         words = map(lambda s: s.strip(), fh.readlines())
     rng = random.SystemRandom()
     return ' '.join([random.choice(words) for i in range(3)])
-
-def get_all_users(args, dbh):
-    c = dbh.cursor()
-    c.execute("""
-        SELECT user_name FROM users
-    """)
-    return c.fetchall()
 
 def _generate_keypair(args, name):
     subprocess.check_call([
@@ -200,7 +193,7 @@ def get_all_users(args, dbh):
     c.execute("""
         SELECT user_name FROM users ORDER BY user_name
     """)
-    return list(c.fetchall())
+    return list(map(lambda x: x[0], c.fetchall()))
 
 
 def _find_active_instances_for(args, ec2, user_name):
