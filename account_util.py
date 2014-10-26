@@ -1,5 +1,6 @@
 import boto
 import boto.ec2
+import codecs
 import logging
 import random
 import subprocess
